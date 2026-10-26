@@ -1,0 +1,28 @@
+# Local tools, archived experiments and temporary work
+/tmp/
+
+# Private local documentation
+/docs/
+
+# Local results and tools
+/results/
+/tools/
+
+# Quartus generated files
+**/db/
+**/incremental_db/
+**/output_files/
+*.qws
+
+# Simulation output and Python caches
+**/sim/out/
+*.vcd
+*.wlf
+*.vvp
+**/__pycache__/
+*.pyc
+
+# Editor/Office temporary files and generated inspection data
+~$*
+*.bak
+*.inspect.ndjson
