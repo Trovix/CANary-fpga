@@ -9,9 +9,11 @@ module tb_can_stimulus;
     parameter [63:0] PAYLOAD = 64'h00_FF_55_AA_12_34_56_78;
     parameter integer BIT_TIME_NS = 1000;  	// 1 Mbit/s
     parameter integer CLK_PERIOD_NS = 20;  	// receiver clock: 50 MHz
+    parameter integer START_OFFSET_NS = 7;
     parameter integer EXTRA_IDLE_BITS = 0; 	// additional to 3-bit intermission
     parameter integer DUMP_FRAMES = 4;     	// how many frames to VCD record
     parameter bit ACK_DOMINANT = 0;        	// no ACKing 
+    parameter bit CHECK_RECEIVER = 1;
 
     reg clk = 0;				
     reg reset_n = 0;								 	// future use
@@ -26,13 +28,56 @@ module tb_can_stimulus;
     integer stuff_count = 0;
     integer frames_sent = 0;
 
-    // DUT will go here 
-	 // can_sniffer dut (
-	 //	.clk(clk),
-	 //   .reset_n(reset_n),
-	 //   .can_rx(can_rx)
+    wire rx_busy, rx_start, rx_header, rx_complete;
+    wire rx_stuff_error, rx_form_error, rx_unsupported;
+    wire [10:0] rx_id;
+    wire [3:0] rx_dlc;
+    wire [63:0] rx_payload;
+    wire [14:0] rx_crc;
+    wire rx_ack, crc_data_valid, crc_data_bit;
+    integer frames_received = 0;
+    integer headers_received = 0;
+    integer crc_data_count = 0;
+    localparam [63:0] EXPECTED_PAYLOAD = PAYLOAD &
+        (64'hffff_ffff_ffff_ffff << (64 - 8 * DLC));
 
-	 
+    can_sniffer dut (
+        .clk(clk), .reset_n(reset_n), .can_rx(can_rx), .busy(rx_busy),
+        .frame_start(rx_start), .header_valid(rx_header), .frame_complete(rx_complete),
+        .stuff_error(rx_stuff_error), .form_error(rx_form_error),
+        .unsupported_frame(rx_unsupported), .identifier(rx_id), .dlc(rx_dlc),
+        .payload(rx_payload), .received_crc(rx_crc), .ack_seen(rx_ack),
+        .crc_data_valid(crc_data_valid), .crc_data_bit(crc_data_bit)
+    );
+
+    // These checks observe DUT outputs; the DUT receives only clock/reset/RX.
+    always @(posedge clk) begin
+        if (reset_n && CHECK_RECEIVER) begin
+            if (rx_stuff_error || rx_form_error || rx_unsupported)
+                $fatal(1, "Receiver rejected ID 0x%03h (stuff=%b form=%b unsupported=%b)",
+                    current_id, rx_stuff_error, rx_form_error, rx_unsupported);
+            if (crc_data_valid) begin
+                if (crc_data_count >= 19 + 8 * DLC ||
+                    crc_data_bit !== body[crc_data_count])
+                    $fatal(1, "Incorrect CRC input bit %0d", crc_data_count);
+                crc_data_count = crc_data_count + 1;
+            end
+            if (rx_header) begin
+                if (rx_id !== current_id || rx_dlc !== current_dlc)
+                    $fatal(1, "Receiver header mismatch");
+                headers_received = headers_received + 1;
+            end
+            if (rx_complete) begin
+                if (rx_id !== current_id || rx_dlc !== current_dlc ||
+                    rx_payload !== EXPECTED_PAYLOAD || rx_crc !== current_crc ||
+                    rx_ack !== ACK_DOMINANT || crc_data_count != 19 + 8 * DLC)
+                    $fatal(1, "Receiver frame mismatch: ID=%03h payload=%016h CRC=%04h bits=%0d",
+                        rx_id, rx_payload, rx_crc, crc_data_count);
+                frames_received = frames_received + 1;
+                crc_data_count = 0;
+            end
+        end
+    end
     always #(CLK_PERIOD_NS / 2.0) clk = ~clk; 			//clock
 
     reg body [0:127];                      				// unstuffed SOF through CRC
@@ -170,12 +215,14 @@ module tb_can_stimulus;
             $dumpvars(0, reset_n, can_rx, frame_active, is_stuff_bit,
                 current_id, current_dlc, current_payload, current_crc,
                 wire_bit_index, stuff_count, frames_sent);
+            $dumpvars(0, dut);
         end
 
         repeat (10) @(negedge clk);
         reset_n = 1;
-        // offset bus edges from the rx clock.
-        #(11 * BIT_TIME_NS + 7);
+        // Allow idle acquisition even with a slightly faster sender, then
+        // offset bus edges from the receiver clock.
+        #(12 * BIT_TIME_NS + START_OFFSET_NS);
         sweep = 0;
 		  //sweep sweep sweep!
         while (SWEEPS == 0 || sweep < SWEEPS) begin
@@ -186,6 +233,10 @@ module tb_can_stimulus;
 		  
 		  //log finish
         if (trace_fd != 0) $fclose(trace_fd);
+        if (CHECK_RECEIVER && (frames_received != frames_sent || headers_received != frames_sent))
+            $fatal(1, "Receiver missed frames: sent=%0d headers=%0d completed=%0d",
+                frames_sent, headers_received, frames_received);
+        if (CHECK_RECEIVER) $display("PASS: receiver decoded %0d frames", frames_received);
         $display("DONE: sent %0d standard CAN data frames", frames_sent);
         $finish;
     end

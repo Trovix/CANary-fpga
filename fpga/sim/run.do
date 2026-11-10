@@ -3,7 +3,7 @@ set sim_dir [file dirname [file normalize [info script]]]
 file mkdir [file join $sim_dir out]
 cd [file join $sim_dir out]
 if {![file isdirectory work]} { vlib work }
-vlog -sv [file join $sim_dir tb_can_stimulus.sv]
+vlog -sv {*}[glob [file join $sim_dir ../rtl *.sv]] [file join $sim_dir tb_can_stimulus.sv]
 vsim -onfinish stop -voptargs=+acc work.tb_can_stimulus +trace=frames.tsv
 add wave sim:/tb_can_stimulus/can_rx
 add wave sim:/tb_can_stimulus/reset_n
@@ -15,5 +15,12 @@ add wave sim:/tb_can_stimulus/is_stuff_bit
 add wave sim:/tb_can_stimulus/stuff_count
 add wave sim:/tb_can_stimulus/wire_bit_index
 add wave sim:/tb_can_stimulus/frames_sent
+add wave sim:/tb_can_stimulus/rx_header
+add wave sim:/tb_can_stimulus/rx_complete
+add wave sim:/tb_can_stimulus/rx_id
+add wave sim:/tb_can_stimulus/rx_payload
+add wave sim:/tb_can_stimulus/dut/timing/*
+add wave sim:/tb_can_stimulus/dut/destuffer/*
+add wave sim:/tb_can_stimulus/dut/parser/*
 run -all
 wave zoom range 0ns 150us
