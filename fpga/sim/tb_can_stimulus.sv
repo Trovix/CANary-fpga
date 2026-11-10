@@ -16,7 +16,7 @@ module tb_can_stimulus;
     parameter bit CHECK_RECEIVER = 1;
 
     reg clk = 0;				
-    reg reset_n = 0;								 	// future use
+    reg reset_n = 0;								 	// active-low receiver reset
     reg can_rx = 1;                        	// 0 = dominant; 1 = recessive
     reg frame_active = 0;		
     reg is_stuff_bit = 0;							
@@ -41,7 +41,7 @@ module tb_can_stimulus;
     localparam [63:0] EXPECTED_PAYLOAD = PAYLOAD &
         (64'hffff_ffff_ffff_ffff << (64 - 8 * DLC));
 
-    can_sniffer dut (
+    can_receiver dut (
         .clk(clk), .reset_n(reset_n), .can_rx(can_rx), .busy(rx_busy),
         .frame_start(rx_start), .header_valid(rx_header), .frame_complete(rx_complete),
         .stuff_error(rx_stuff_error), .form_error(rx_form_error),

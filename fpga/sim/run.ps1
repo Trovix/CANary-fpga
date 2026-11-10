@@ -41,7 +41,7 @@ try {
         ('-Ptb_can_stimulus.ACK_DOMINANT=' + [int](-not $RecessiveAck)),
         (Join-Path $PSScriptRoot 'tb_can_stimulus.sv')
     )
-    $compileArgs += @(Get-ChildItem (Join-Path $PSScriptRoot '../rtl/*.sv') | ForEach-Object FullName)
+    $compileArgs += (Join-Path $PSScriptRoot '../rtl/can_receiver.sv')
     & $compiler @compileArgs
     if ($LASTEXITCODE -ne 0) { throw 'CAN testbench compilation failed.' }
     & $runtime can_stimulus.vvp '+trace=frames.tsv'
